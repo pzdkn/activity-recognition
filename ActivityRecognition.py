@@ -78,7 +78,7 @@ def compute_metrics(preds, labels, label_dict):
     return metric_dict
 
 if __name__ == '__main__':
-    act_data = ActivityDataset('../Data/27_04', window_length=5)
+    act_data = ActivityDataset('./Data/27_04', window_length=5)
     label_dict = act_data.labels
     trainloader, devloader, testloader = train_dev_test_loader(act_data)
     model = SimpleClassifier(len(label_dict))

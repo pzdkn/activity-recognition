@@ -1,0 +1,13 @@
+INFORMATION ABOUT THE DATASET
+
+
+EACH .npy is composed of  a list of n trajectories.
+
+Each trajectory is composed of T time samples
+
+Each time sample is composed of K objects, in this order ('HandRight','tomato','dish','glass','Tea')
+
+Each object is composed of 7 (s) state variables (pos_X, pos_Y, pos_Z, rot_x, rot_y, rot_z, rot_w)
+
+
+List[n][T][K][s]
