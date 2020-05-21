@@ -17,6 +17,7 @@ class ActivityDataset(Dataset):
         self.data = []
         # not sure if this mapping is correct
         self.object2idx = {'HandRight': 0, 'tomato': 1, 'dish': 2, 'glass': 3, 'Tea': 4}
+        # TODO!: choose the labels more wisely
         for label_idx, filename in enumerate(glob.iglob('%s/*.npy' % root_dir)):
             trajectories = np.load(filename)
             label = filename.split("/")[-1][:-4]
@@ -27,6 +28,8 @@ class ActivityDataset(Dataset):
             self.labels[label_idx] = activity_label
             windows = rolling_window(trajectories, window_length)
             for window in windows:
+                # only pick the object related and hand
+                # pick position and rotation
                 trajectory = window[:, [0, self.object2idx[object_label]], :]
                 self.data.append(dict(trajectory=trajectory, label=label_idx))
 
