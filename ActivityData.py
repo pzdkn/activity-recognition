@@ -19,18 +19,23 @@ class ActivityDataset(Dataset):
         self.object2idx = {'HandRight': 0, 'tomato': 1, 'dish': 2, 'glass': 3, 'Tea': 4}
         for filename in glob.iglob('%s/*.npy' % root_dir):
             trajectories = np.load(filename)
+            # obtain labels from filename
             label = filename.split("/")[-1][:-4]
             label_list = label.split("_")[:-1]
             object_label = label.split("_")[-1]
             activity_label = "_".join(label_list)
+            # we select only a predefined subset of labels
             if activity_label not in self.labels2idx.keys():
                 continue
+            # select only a time segment for input data
             windows = rolling_window(trajectories, window_length)
             non_involved_object_indices = list(range(1, len(self.object2idx)))
             non_involved_object_indices.remove(self.object2idx[object_label])
             for window in windows:
+                # for input select hand and involved object
                 trajectory = window[:, [0, self.object2idx[object_label]], :]
                 self.data.append(dict(trajectory=trajectory, label=self.labels2idx[activity_label]))
+                # all non-involved objects get the label "no action"
                 for nobj_idx in non_involved_object_indices:
                     zeros_shape = window[:, 0:1, :].shape
                     trajectory = window[:, [0, nobj_idx], :]
