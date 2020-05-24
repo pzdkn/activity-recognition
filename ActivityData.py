@@ -13,7 +13,7 @@ class ActivityDataset(Dataset):
     def __init__(self, root_dir, window_length=None, transform=None):
         self.root_dir = root_dir
         self.transform = transform
-        self.labels2idx = {0: "no action"}
+        self.labels2idx = {"no action": 0}
         self.data = []
         # not sure if this mapping is correct
         self.object2idx = {'HandRight': 0, 'tomato': 1, 'dish': 2, 'glass': 3, 'Tea': 4}
@@ -34,13 +34,21 @@ class ActivityDataset(Dataset):
                 self.labels2idx[activity_label] = label_idx
             windows = rolling_window(trajectories, window_length)
             for window in windows:
+                non_involved_object_indices = list(range(0, len(self.object2idx)))
+                non_involved_object_indices.remove(self.object2idx[object1_label])
                 if object2_label is not None:
                     trajectory = window[:, [0, self.object2idx[object1_label], self.object2idx[object2_label]], :]
+                    non_involved_object_indices.remove(self.object2idx[object2_label])
                 else:
                     zeros_shape = window[:, 0:1, :].shape
                     trajectory = np.concatenate((window[:, [0, self.object2idx[object1_label]], :],
                                            np.zeros(zeros_shape)), axis=1)
                 self.data.append(dict(trajectory=trajectory, label=self.labels2idx[activity_label]))
+                for nobj_idx in non_involved_object_indices:
+                    zeros_shape = window[:, 0:1, :].shape
+                    trajectory = np.concatenate((window[:, [0, nobj_idx], :],
+                                                 np.zeros(zeros_shape)), axis=1)
+                    self.data.append(dict(trajectory=trajectory, label=self.labels2idx["no action"]))
 
     def __len__(self):
         return len(self.data)
