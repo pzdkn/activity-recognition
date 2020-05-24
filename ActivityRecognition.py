@@ -1,7 +1,7 @@
 from SimpleClassifier import SimpleClassifier
-from AcitivityData import ActivityDataset
-from AcitivityData import train_dev_test_loader
-from AcitivityData import homogenous_trans, pseudo_relative_trans, pseudo_toy_trans
+from ActivityData import ActivityDataset
+from ActivityData import train_dev_test_loader
+from ActivityData import homogenous_trans, pseudo_relative_trans, pseudo_toy_trans
 import torch.nn as nn
 from torch import optim
 import torch
@@ -79,7 +79,7 @@ def compute_metrics(preds, labels, label_dict):
 
 if __name__ == '__main__':
     act_data = ActivityDataset('./Data/27_04', window_length=5)
-    label_dict = act_data.labels
+    label_dict = act_data.labels2idx
     trainloader, devloader, testloader = train_dev_test_loader(act_data)
     model = SimpleClassifier(len(label_dict))
     model.double()

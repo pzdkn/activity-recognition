@@ -14,11 +14,11 @@ class Print(nn.Module):
 class SimpleClassifier(nn.Module):
     def __init__(self, output_dim):
         super(SimpleClassifier, self).__init__()
-        self.fc1 = nn.Linear(70, 100)
-        self.fc2 = nn.Linear(100, output_dim)
+        self.fc1 = nn.Linear(105, 120)
+        self.fc2 = nn.Linear(120, output_dim)
 
     def forward(self, x):
-        x = x.view(-1, 70)
+        x = x.view(-1, 105)
         x = F.relu(self.fc1(x))
         x = self.fc2(x)
         return x

@@ -13,25 +13,34 @@ class ActivityDataset(Dataset):
     def __init__(self, root_dir, window_length=None, transform=None):
         self.root_dir = root_dir
         self.transform = transform
-        self.labels = {}
+        self.labels2idx = {0: "no action"}
         self.data = []
         # not sure if this mapping is correct
         self.object2idx = {'HandRight': 0, 'tomato': 1, 'dish': 2, 'glass': 3, 'Tea': 4}
-        # TODO!: choose the labels more wisely
-        for label_idx, filename in enumerate(glob.iglob('%s/*.npy' % root_dir)):
+        label_idx = 0
+        for filename in glob.iglob('%s/*.npy' % root_dir):
             trajectories = np.load(filename)
             label = filename.split("/")[-1][:-4]
-            # right now I just use the last object in the label name as object in quesiton. However this should be
-            # changed TODO!: extend to multiple object/multiple actions -> multilabel classification ?
-            object_label = label.split("_")[-1]
-            activity_label = "_".join(label.split("_")[:-1])
-            self.labels[label_idx] = activity_label
+            label_list = label.split("_")[:-1]
+            object1_label = label.split("_")[-1]
+            object2_label = None
+            if len(label_list) > 2:
+                object2_label = label_list[1]
+                label_list[1] = "?"
+                label_list.append("?")
+            activity_label = "_".join(label_list)
+            if activity_label not in self.labels2idx.keys():
+                label_idx += 1
+                self.labels2idx[activity_label] = label_idx
             windows = rolling_window(trajectories, window_length)
             for window in windows:
-                # only pick the object related and hand
-                # pick position and rotation
-                trajectory = window[:, [0, self.object2idx[object_label]], :]
-                self.data.append(dict(trajectory=trajectory, label=label_idx))
+                if object2_label is not None:
+                    trajectory = window[:, [0, self.object2idx[object1_label], self.object2idx[object2_label]], :]
+                else:
+                    zeros_shape = window[:, 0:1, :].shape
+                    trajectory = np.concatenate((window[:, [0, self.object2idx[object1_label]], :],
+                                           np.zeros(zeros_shape)), axis=1)
+                self.data.append(dict(trajectory=trajectory, label=self.labels2idx[activity_label]))
 
     def __len__(self):
         return len(self.data)
@@ -110,7 +119,7 @@ def pseudo_toy_trans(sample):
 
 if __name__ == '__main__':
     # Create dataset & loader
-    act_dataset = ActivityDataset('../Data/27_04', window_length=5, transform=pseudo_relative_trans)
+    act_dataset = ActivityDataset('./Data/27_04', window_length=5, transform=pseudo_relative_trans)
     trainloader, devloader, testloader = train_dev_test_loader(act_dataset)
     for data in trainloader:
         print(data)
