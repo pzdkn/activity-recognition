@@ -74,7 +74,7 @@ def compute_metrics(preds, labels, label_dict):
     precision = metrics.precision_score(labels, preds, average=None)
     recall = metrics.recall_score(labels, preds, average=None)
     for key, value in label_dict.items():
-        metric_dict[value] = {"precision": precision[key], "recall": recall[key], "f1": f1[key]}
+        metric_dict[key] = {"precision": precision[value], "recall": recall[value], "f1": f1[value]}
     return metric_dict
 
 if __name__ == '__main__':

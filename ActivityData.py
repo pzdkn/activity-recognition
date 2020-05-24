@@ -26,7 +26,8 @@ class ActivityDataset(Dataset):
             if activity_label not in self.labels2idx.keys():
                 continue
             windows = rolling_window(trajectories, window_length)
-            non_involved_object_indices = range(0, len(self.labels2idx))
+            non_involved_object_indices = list(range(1, len(self.object2idx)))
+            non_involved_object_indices.remove(self.object2idx[object_label])
             for window in windows:
                 trajectory = window[:, [0, self.object2idx[object_label]], :]
                 self.data.append(dict(trajectory=trajectory, label=self.labels2idx[activity_label]))
