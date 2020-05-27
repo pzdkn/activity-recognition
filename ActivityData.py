@@ -4,13 +4,14 @@ import glob
 import torch
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
+from torch.utils.data.sampler import RandomSampler
 from scipy.spatial.transform import Rotation
 import copy
 
 
 # Define dataset
 class ActivityDataset(Dataset):
-    def __init__(self, root_dir, test=False, window_length=None, transform=None):
+    def __init__(self, root_dir, window_length=None, transform=None):
         self.root_dir = root_dir
         self.transform = transform
         self.labels2idx = {"no action": 0, "go_to": 1, "pick": 2}
@@ -29,20 +30,44 @@ class ActivityDataset(Dataset):
                 continue
             # select only a time segment for input data
             windows = rolling_window(trajectories, window_length)
-            non_involved_object_indices = list(range(1, len(self.object2idx)))
-            non_involved_object_indices.remove(self.object2idx[object_label])
             for window in windows:
-                if test is True:
-                    self.data.append(dict(trajectory=window, activity_label=self.labels2idx[activity_label],
-                                          object_label=self.object2idx[object_label]))
-                else:
-                    # for input select hand and involved object
-                    trajectory = window[:, [0, self.object2idx[object_label]], :]
-                    self.data.append(dict(trajectory=trajectory, label=self.labels2idx[activity_label]))
-                    # all non-involved objects get the label "no action"
-                    for nobj_idx in non_involved_object_indices:
-                        trajectory = window[:, [0, nobj_idx], :]
-                        self.data.append(dict(trajectory=trajectory, label=self.labels2idx["no action"]))
+                self.data.append(dict(trajectory=window, activity_label=activity_label,
+                                      object_label=object_label))
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        sample = self.data[idx]
+        if self.transform:
+            sample = self.transform(sample)
+        return sample
+
+
+""" 
+since traindata and test data have different structure, the easiest I have come up with to capture this is with
+a separate classes
+"""
+
+
+class ActivityTrainSet(Dataset):
+    def __init__(self, activity_data, indices):
+        # indices are a random percentage of indices of the original dataset
+        self.labels2idx = activity_data.labels2idx
+        self.object2idx = activity_data.object2idx
+        self.transform = activity_data.transform
+        self.data = []
+        for index in indices:
+            activity_label = activity_data[index]["activity_label"]
+            object_label = activity_data[index]["object_label"]
+            trajectory = activity_data[index]["trajectory"]
+            self.data.append(dict(trajectory=trajectory[:, self.object2idx[object_label], :]
+                                  , label=self.labels2idx[activity_label]))
+            for obj, idx in self.object2idx.items():
+                if obj in ("HandRight", object_label):
+                    continue  # skip hand and object involved
+                # label trajectories of objects that are non involved with "no action"
+                self.data.append(dict(trajectory=trajectory[:, [0, idx], :], label=self.labels2idx["no action"]))
 
     def __len__(self):
         return len(self.data)
@@ -52,6 +77,33 @@ class ActivityDataset(Dataset):
         if self.transform:
             sample = self.transform(sample)
         return sample
+
+
+class ActivityTestSet(Dataset):
+    def __init__(self, activity_data, indices):
+        # indices are a random percentage of indices of the original dataset
+        self.labels2idx = activity_data.labels2idx
+        self.object2idx = activity_data.object2idx
+        self.transform = activity_data.transform
+        self.data = []
+        for index in indices:
+            activity_label = activity_data[index]["activity_label"]
+            trajectory = activity_data[index]["trajectory"]
+            object_label = activity_data[index]["object_label"]
+            self.data.append(activity_data[index])
+            self.data.append(dict(trajectory=trajectory,
+                                  activity_label=self.labels2idx[activity_label],
+                                  object_label=self.object2idx[object_label]))
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        sample = copy.deepcopy(self.data[idx])
+        if self.transform:
+            sample = self.transform(sample)
+        return sample
+
 
 # extract a rolling time window from the signals
 def rolling_window(trajectories, window_length):
@@ -67,24 +119,33 @@ def rolling_window(trajectories, window_length):
 
 
 # shuffle the data, and define the split
-def train_dev_test_loader(data, split={'train': 0.8, 'dev': 0.1}):
+def train_dev_test_loader(activity_data, split={'train': 0.8, "dev": 0.1, 'test': 0.1}):
     np.random.seed(420)
-    n = len(data)
+    # first we split the test set from the rest
+    n = len(activity_data)
     indices = list(range(n))
     np.random.shuffle(indices)
-    split0 = int(split['train'] * n)
-    split1 = int(split['dev'] * n)
-    train_idx, dev_idx, test_idx = indices[:split0], indices[split0:split0 + split1], indices[split0 + split1:]
+    split_train = int(split['train'] * n)
+    rest_idx, test_idx = indices[:split_train], indices[split_train:]
+    train_data = ActivityTrainSet(act_dataset, rest_idx)
+    test_data = ActivityTestSet(act_dataset, test_idx)
+    # then we split train and dev
+    m = len(train_data)
+    rest_indices = list(range(m))
+    # since the total index size is now reduced to train split, we have to rescale the dev split
+    split_dev = int(split['dev'] * m * 1 / split["train"])
+    dev_idx, train_idx = rest_indices[:split_dev], rest_indices[split_dev:]
     train_sampler = SubsetRandomSampler(train_idx)
     dev_sampler = SubsetRandomSampler(dev_idx)
-    test_sampler = SubsetRandomSampler(test_idx)
-    trainloader = torch.utils.data.DataLoader(data,
+    test_sampler = RandomSampler(test_data)
+    trainloader = torch.utils.data.DataLoader(train_data,
                                               sampler=train_sampler, batch_size=1)
-    devloader = torch.utils.data.DataLoader(data,
+    devloader = torch.utils.data.DataLoader(train_data,
                                             sampler=dev_sampler, batch_size=1)
-    testloader = torch.utils.data.DataLoader(data,
+    testloader = torch.utils.data.DataLoader(test_data,
                                              sampler=test_sampler, batch_size=1)
     return trainloader, devloader, testloader
+
 
 # this is used to get a homogenous transformation from object frame to human frame
 def homogenous_trans(sample):
@@ -106,6 +167,7 @@ def homogenous_trans(sample):
         trajectory[i, 1, :3] = T.dot(t_h)[:3]
     return sample
 
+
 # a cheap transformation to make object position relative to human position
 def pseudo_relative_trans(sample):
     trajectory = sample["trajectory"]
@@ -114,19 +176,31 @@ def pseudo_relative_trans(sample):
     # playing with python's copy by reference
     return sample
 
+
 # toy transform to play with
 def pseudo_toy_trans(sample):
     sample["trajectory"] *= 100
     return sample
 
+
 if __name__ == '__main__':
     # Create dataset & loader
-    act_dataset = ActivityDataset('./Data/27_04', window_length=5, transform=pseudo_relative_trans)
+    act_dataset = ActivityDataset('./Data/27_04', window_length=5)
     trainloader, devloader, testloader = train_dev_test_loader(act_dataset)
-    for data in trainloader:
-        print(data)
-        tr = data["trajectory"]
-        print(tr.shape)
-        label = data["label"]
+    for i, sample in enumerate(trainloader):
+        trajectory = sample["trajectory"]
+        label = sample["label"]
         print(label)
-        break
+        print(trajectory.shape)
+        if i == 0:
+            break
+
+    for i, sample in enumerate(testloader):
+        trajectory = sample["trajectory"]
+        activity_label = sample["activity_label"]
+        object_label = sample["object_label"]
+        print(activity_label)
+        print(object_label)
+        print(trajectory.shape)
+        if i == 0:
+            break
