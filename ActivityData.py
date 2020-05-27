@@ -10,7 +10,7 @@ import copy
 
 # Define dataset
 class ActivityDataset(Dataset):
-    def __init__(self, root_dir, window_length=None, transform=None):
+    def __init__(self, root_dir, test=False, window_length=None, transform=None):
         self.root_dir = root_dir
         self.transform = transform
         self.labels2idx = {"no action": 0, "go_to": 1, "pick": 2}
@@ -32,14 +32,17 @@ class ActivityDataset(Dataset):
             non_involved_object_indices = list(range(1, len(self.object2idx)))
             non_involved_object_indices.remove(self.object2idx[object_label])
             for window in windows:
-                # for input select hand and involved object
-                trajectory = window[:, [0, self.object2idx[object_label]], :]
-                self.data.append(dict(trajectory=trajectory, label=self.labels2idx[activity_label]))
-                # all non-involved objects get the label "no action"
-                for nobj_idx in non_involved_object_indices:
-                    zeros_shape = window[:, 0:1, :].shape
-                    trajectory = window[:, [0, nobj_idx], :]
-                    self.data.append(dict(trajectory=trajectory, label=self.labels2idx["no action"]))
+                if test is True:
+                    self.data.append(dict(trajectory=window, activity_label=self.labels2idx[activity_label],
+                                          object_label=self.object2idx[object_label]))
+                else:
+                    # for input select hand and involved object
+                    trajectory = window[:, [0, self.object2idx[object_label]], :]
+                    self.data.append(dict(trajectory=trajectory, label=self.labels2idx[activity_label]))
+                    # all non-involved objects get the label "no action"
+                    for nobj_idx in non_involved_object_indices:
+                        trajectory = window[:, [0, nobj_idx], :]
+                        self.data.append(dict(trajectory=trajectory, label=self.labels2idx["no action"]))
 
     def __len__(self):
         return len(self.data)
