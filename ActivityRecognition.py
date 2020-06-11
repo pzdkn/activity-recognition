@@ -76,7 +76,10 @@ def evaluate_action_2(testloader, model, obj2idx, labels2idx, device='cpu'):
     with torch.no_grad():
         for data in testloader:
             object_index = data['object_label']
-            trajectory = data['trajectory'][:, [0, object_index], :]
+            trajectory = data['trajectory']
+            print(trajectory.shape)
+            trajectory = trajectory[:, :, [0, object_index], :]
+            print(trajectory.shape)
             activity_index = data['activity_label']
             trajectory, activity_index = trajectory.to(device), activity_index.to(device)
             logits = model.forward(trajectory)
@@ -98,7 +101,7 @@ def evaluate_action_object(testloader, model, obj2idx, labels2idx, device="cpu")
             for obj_label, obj_index in obj2idx.items():
                 if obj_label is "HandRight":
                     continue
-                logits = model.forward(trajectory[:, [0, obj_index], :])
+                logits = model.forward(trajectory[:, :, [0, obj_index], :])
                 max_value, max_index = torch.max(logits, dim=1)
                 if max_index.item() == 0:
                     zeros += 1
@@ -144,4 +147,5 @@ if __name__ == '__main__':
     train_losses, test_losses = train(trainloader, devloader, model)
     print_losses(train_losses, test_losses)
     evaluate_action_2(testloader, model, object2idx, label2idx)
+    evaluate_action_object(testloader, model, object2idx, label2idx)
     evaluate_action(testloader2, model)

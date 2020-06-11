@@ -64,13 +64,15 @@ class ActivityTrainSet(Dataset):
             self.data.append(dict(trajectory=trajectory[:, [0, object_index], :],
                                   activity_label=activity_index,
                                   object_label=object_index))
-            """
             for idx in self.object2idx.values():
                 if idx in (0, object_index):
                     continue  # skip hand and object involved
                 # activity_label trajectories of objects that are non involved with "no action"
-                self.data.append(dict(trajectory=trajectory[:, [0, idx], :], activity_label=self.labels2idx["no action"]))
-            """
+                self.data.append(dict(trajectory=trajectory[:, [0, idx], :],
+                                      activity_label=self.labels2idx["no action"],
+                                      object_label=object_index
+                                      ))
+
     def __len__(self):
         return len(self.data)
 
@@ -127,7 +129,7 @@ def train_dev_test_loader(act_data, split={'train': 0.7, "dev": 0.15, 'test': 0.
     indices = list(range(n))
     np.random.shuffle(indices)
     split_train = int(split['train'] * n)
-    rest_idx, test_idx = indices[:split_train], indices[split_train:]
+    rest_idx, test_idx = indices[:-3], indices[-3:]
     rest_data = ActivityTrainSet(act_data, rest_idx)
     test_data = ActivityTestSet(act_data, test_idx)
     test_data_2 = ActivityTrainSet(act_data, test_idx)
@@ -192,21 +194,22 @@ def pseudo_toy_trans(sample):
 if __name__ == '__main__':
     # Create dataset & loader
     act_dataset = ActivityDataset('./Data/27_04', window_length=5)
-    trainloader, devloader, testloader = train_dev_test_loader(act_dataset)
+    trainloader, devloader, testloader, testloader2 = train_dev_test_loader(act_dataset)
     for i, sample in enumerate(trainloader):
+        if i == 0:
+            break
         trajectory = sample["trajectory"]
         label = sample["activity_label"]
         print(label)
         print(trajectory.shape)
-        if i == 1000:
-            break
 
     for i, sample in enumerate(testloader):
+        if i == 1:
+            break
         trajectory = sample["trajectory"]
         activity_label = sample["activity_label"]
         object_label = sample["object_label"]
         print(activity_label)
         print(object_label)
         print(trajectory.shape)
-        if i == 0:
-            break
+
