@@ -11,7 +11,7 @@ import random
 import os
 
 
-def train(trainloader, devloader, model, epochs=2, lr=0.001, savepath="./act_rec.pth", device="cpu"):
+def train(trainloader, devloader, model, epochs=3, lr=0.001, savepath="./act_rec.pth", device="cpu"):
     model.to(device)
     # Define Loss & Optimizer
     criterion = nn.CrossEntropyLoss()
@@ -101,28 +101,24 @@ def evaluate_action_2(testloader, model, obj2idx, labels2idx, device='cpu'):
 
 def evaluate_action_object(testloader, model, obj2idx, labels2idx, device="cpu"):
     accuracy = 0
-    zeros = 0
     with torch.no_grad():
         for data in testloader:
             object_index = data['object_label']
             trajectory = data['trajectory']
             activity_index = data['activity_label']
-            overall_max = 0
+            overall_max = -1e3
             for obj_label, obj_index in obj2idx.items():
-                if obj_label is "HandRight":
+                if obj_index == 0:
                     continue
-                logits = model.forward(trajectory[:, :, [0, obj_index], :])
+                logits = model.forward(trajectory[:, :, [0, object_index], :])
                 max_value, max_index = torch.max(logits, dim=1)
-                if max_index.item() == 0:
-                    zeros += 1
                 if max_value > overall_max:
                     object_pred = object_index
                     activity_pred = max_index
                     overall_max = max_value
             if object_pred == object_index and activity_pred == activity_index:
                 accuracy += 1
-        print(f"Test accuracy: {accuracy / len(testloader):.3f}")
-        print(zeros)
+        print(f"Action Object Test Accuracy: {accuracy / len(testloader):.3f}")
 
 
 def compute_metrics(preds, labels, label_dict):
@@ -157,4 +153,4 @@ if __name__ == '__main__':
     train_losses, test_losses = train(trainloader, devloader, model)
     print_losses(train_losses, test_losses)
     evaluate_action_2(testloader, model, object2idx, label2idx)
-    evaluate_action(testloader2, model)
+    evaluate_action_object(testloader, model, object2idx, label2idx)

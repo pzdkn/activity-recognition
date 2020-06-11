@@ -122,7 +122,7 @@ def rolling_window(trajectories, window_length):
 
 
 # shuffle the data, and define the split
-def train_dev_test_loader(act_data, split={'train': 0.7, "dev": 0.15, 'test': 0.15}):
+def train_dev_test_loader(act_data, split={'train': 0.8, "dev": 0.1, 'test': 0.1}):
     np.random.seed(420)
     # first we split the test set from the rest
     n = len(act_data)
