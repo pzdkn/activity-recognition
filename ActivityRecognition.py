@@ -7,19 +7,21 @@ from torch import optim
 import torch
 from sklearn import metrics
 import matplotlib.pyplot as plt
+import random
+import os
 
-def train(trainloader, devloader, model, epochs=10, lr=0.001, device="cpu"):
+
+def train(trainloader, devloader, model, epochs=2, lr=0.001, savepath="./act_rec.pth", device="cpu"):
     model.to(device)
     # Define Loss & Optimizer
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=lr)
-    steps = 0
     running_loss = 0
     print_every = 1000
     train_losses, test_losses = [], []
     for epoch in range(epochs):
         for i, traindata in enumerate(trainloader):
-            inputs, labels = traindata['trajectory'], traindata['label']
+            inputs, labels = traindata['trajectory'], traindata['activity_label']
             inputs, labels = inputs.to(device), labels.to(device)
             optimizer.zero_grad()
             loss = criterion(model.forward(inputs), labels)
@@ -32,7 +34,7 @@ def train(trainloader, devloader, model, epochs=10, lr=0.001, device="cpu"):
                 model.eval()
                 with torch.no_grad():
                     for devdata in devloader:
-                        inputs, labels = devdata['trajectory'], devdata['label']
+                        inputs, labels = devdata['trajectory'], devdata['activity_label']
                         inputs, labels = inputs.to(device), labels.to(device)
                         logits = model.forward(inputs)
                         batch_loss = criterion(logits, labels)
@@ -51,25 +53,67 @@ def train(trainloader, devloader, model, epochs=10, lr=0.001, device="cpu"):
     return train_losses, test_losses
 
 
-def test(tesloader, model, device="cpu"):
+def evaluate_action(test_loader, model, device="cpu"):
     accuracy = 0
     preds = torch.tensor([], dtype=torch.long)
     labels = torch.tensor([], dtype=torch.long)
     with torch.no_grad():
-        for data in tesloader:
-            inputs, label = data['trajectory'], data['label']
-            inputs, label = inputs.to(device), label.to(device)
-            logits = model.forward(inputs)
+        for data in test_loader:
+            trajectory, label = data['trajectory'], data['activity_label']
+            trajectory, label = trajectory.to(device), label.to(device)
+            logits = model.forward(trajectory)
             _, top_class = torch.max(logits, dim=1)
             equals = top_class == label.view(*top_class.shape)
             accuracy += torch.mean(equals.type(torch.FloatTensor)).item()
             preds = torch.cat((preds, top_class), dim=0)
             labels = torch.cat((labels, label), dim=0)
-        print(f"Test accuracy: {accuracy / len(testloader):.3f}")
+        print(f"Test accuracy: {accuracy / len(test_loader):.3f}")
     return preds, labels
 
+
+def evaluate_action_2(testloader, model, obj2idx, labels2idx, device='cpu'):
+    accuracy = 0
+    with torch.no_grad():
+        for data in testloader:
+            object_index = data['object_label']
+            trajectory = data['trajectory'][:, [0, object_index], :]
+            activity_index = data['activity_label']
+            trajectory, activity_index = trajectory.to(device), activity_index.to(device)
+            logits = model.forward(trajectory)
+            _, top_class = torch.max(logits, dim=1)
+            equals = top_class == activity_index.view(*top_class.shape)
+            accuracy += torch.mean(equals.type(torch.FloatTensor)).item()
+        print(f"Test accuracy: {accuracy / len(testloader):.3f}")
+
+
+def evaluate_action_object(testloader, model, obj2idx, labels2idx, device="cpu"):
+    accuracy = 0
+    zeros = 0
+    with torch.no_grad():
+        for data in testloader:
+            trajectory, activity_index, object_index = data['trajectory'], data['activity_label'], data['object_label']
+            activity_pred = ""
+            object_pred = ""
+            overall_max = 0
+            for obj_label, obj_index in obj2idx.items():
+                if obj_label is "HandRight":
+                    continue
+                logits = model.forward(trajectory[:, [0, obj_index], :])
+                max_value, max_index = torch.max(logits, dim=1)
+                if max_index.item() == 0:
+                    zeros += 1
+                if max_value > overall_max:
+                    object_pred = object_index
+                    activity_pred = max_index
+                    overall_max = max_value
+            if object_pred == object_index and activity_pred == activity_index:
+                accuracy += 1
+        print(f"Test accuracy: {accuracy / len(testloader):.3f}")
+        print(zeros)
+
+
 def compute_metrics(preds, labels, label_dict):
-    metric_dict={}
+    metric_dict = {}
     f1 = metrics.f1_score(labels, preds, average=None)
     precision = metrics.precision_score(labels, preds, average=None)
     recall = metrics.recall_score(labels, preds, average=None)
@@ -77,13 +121,8 @@ def compute_metrics(preds, labels, label_dict):
         metric_dict[key] = {"precision": precision[value], "recall": recall[value], "f1": f1[value]}
     return metric_dict
 
-if __name__ == '__main__':
-    act_data = ActivityDataset('./Data/27_04', window_length=5)
-    label_dict = act_data.labels2idx
-    trainloader, devloader, testloader = train_dev_test_loader(act_data)
-    model = SimpleClassifier(len(label_dict))
-    model.double()
-    train_losses, test_losses = train(trainloader, devloader, model)
+
+def print_losses(train_losses, val_losses):
     plt.plot(train_losses, label="Traing Loss")
     plt.plot(test_losses, label="Validation Loss")
     plt.xlabel("Training Steps")
@@ -91,6 +130,18 @@ if __name__ == '__main__':
     plt.title("Losses")
     plt.legend(loc='lower right')
     plt.show()
-    preds, labels = test(testloader, model)
-    metric_dict = compute_metrics(preds, labels, label_dict)
-    print(metric_dict)
+
+
+if __name__ == '__main__':
+    torch.manual_seed(42)
+    print(random.random())
+    act_data = ActivityDataset('./Data/27_04', window_length=5)
+    label2idx = act_data.labels2idx
+    object2idx = act_data.object2idx
+    trainloader, devloader, testloader, testloader2 = train_dev_test_loader(act_data)
+    model = SimpleClassifier(len(label2idx))
+    model.double()
+    train_losses, test_losses = train(trainloader, devloader, model)
+    print_losses(train_losses, test_losses)
+    evaluate_action_2(testloader, model, object2idx, label2idx)
+    evaluate_action(testloader2, model)
