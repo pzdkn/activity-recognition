@@ -73,20 +73,30 @@ def evaluate_action(test_loader, model, device="cpu"):
 
 def evaluate_action_2(testloader, model, obj2idx, labels2idx, device='cpu'):
     accuracy = 0
+    total = 0
     with torch.no_grad():
         for data in testloader:
             object_index = data['object_label']
             trajectory = data['trajectory']
-            print(trajectory.shape)
-            trajectory = trajectory[:, :, [0, object_index], :]
-            print(trajectory.shape)
+            traj = trajectory[:, :, [0, object_index], :]
             activity_index = data['activity_label']
-            trajectory, activity_index = trajectory.to(device), activity_index.to(device)
-            logits = model.forward(trajectory)
+            traj, activity_index = traj.to(device), activity_index.to(device)
+            logits = model.forward(traj)
             _, top_class = torch.max(logits, dim=1)
             equals = top_class == activity_index.view(*top_class.shape)
             accuracy += torch.mean(equals.type(torch.FloatTensor)).item()
-        print(f"Test accuracy: {accuracy / len(testloader):.3f}")
+            total += 1
+            for obj_idx in object2idx.values():
+                if obj_idx in (0, object_index):
+                    continue
+                na_index = torch.tensor([label2idx['no action']], dtype=torch.int64)
+                na_traj = trajectory[:, :, [0, obj_idx], :]
+                logits = model.forward(na_traj)
+                _, top_class = torch.max(logits, dim=1)
+                equals = top_class == na_index.view(*top_class.shape)
+                accuracy += torch.mean(equals.type(torch.FloatTensor)).item()
+                total += 1
+        print(f"Test accuracy: {accuracy / total :.3f}")
 
 
 def evaluate_action_object(testloader, model, obj2idx, labels2idx, device="cpu"):
@@ -94,9 +104,9 @@ def evaluate_action_object(testloader, model, obj2idx, labels2idx, device="cpu")
     zeros = 0
     with torch.no_grad():
         for data in testloader:
-            trajectory, activity_index, object_index = data['trajectory'], data['activity_label'], data['object_label']
-            activity_pred = ""
-            object_pred = ""
+            object_index = data['object_label']
+            trajectory = data['trajectory']
+            activity_index = data['activity_label']
             overall_max = 0
             for obj_label, obj_index in obj2idx.items():
                 if obj_label is "HandRight":
@@ -147,5 +157,4 @@ if __name__ == '__main__':
     train_losses, test_losses = train(trainloader, devloader, model)
     print_losses(train_losses, test_losses)
     evaluate_action_2(testloader, model, object2idx, label2idx)
-    evaluate_action_object(testloader, model, object2idx, label2idx)
     evaluate_action(testloader2, model)

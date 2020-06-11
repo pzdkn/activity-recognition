@@ -129,7 +129,7 @@ def train_dev_test_loader(act_data, split={'train': 0.7, "dev": 0.15, 'test': 0.
     indices = list(range(n))
     np.random.shuffle(indices)
     split_train = int(split['train'] * n)
-    rest_idx, test_idx = indices[:-3], indices[-3:]
+    rest_idx, test_idx = indices[:split_train], indices[split_train:]
     rest_data = ActivityTrainSet(act_data, rest_idx)
     test_data = ActivityTestSet(act_data, test_idx)
     test_data_2 = ActivityTrainSet(act_data, test_idx)
