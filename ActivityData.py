@@ -11,6 +11,9 @@ import copy
 
 # Define dataset
 class ActivityDataset(Dataset):
+    """
+
+    """
     def __init__(self, root_dir, window_length=None, transform=None):
         self.root_dir = root_dir
         self.transform = transform
@@ -43,10 +46,42 @@ class ActivityDataset(Dataset):
             sample = self.transform(sample)
         return sample
 
+    # shuffle the data, and define the split
+    def train_dev_test_loader(self, split={'train': 0.8, "dev": 0.1, 'test': 0.1}):
+        np.random.seed(420)
+        # first we split the test set from the rest
+        n = len(self)
+        indices = list(range(n))
+        np.random.shuffle(indices)
+        split_train = int(split['train'] * n)
+        rest_idx, test_idx = indices[:split_train], indices[split_train:]
+        rest_data = ActivityTrainSet(self, rest_idx)
+        test_data = ActivityTestSet(self, test_idx)
+        # then we split train and dev
+        m = len(rest_data)
+        rest_indices = list(range(m))
+        np.random.shuffle(rest_indices)
+        # since the total index size is now reduced to train split, we have to rescale the dev split
+        split_dev = int(split['dev'] * m / split["train"])
+        dev_idx, train_idx = rest_indices[:split_dev], rest_indices[split_dev:]
+        train_sampler = SubsetRandomSampler(train_idx)
+        dev_sampler = SubsetRandomSampler(dev_idx)
+        test_sampler = RandomSampler(test_data)
+        trainloader = torch.utils.data.DataLoader(rest_data,
+                                                  sampler=train_sampler, batch_size=1)
+        devloader = torch.utils.data.DataLoader(rest_data,
+                                                sampler=dev_sampler, batch_size=1)
+        testloader = torch.utils.data.DataLoader(test_data,
+                                                 sampler=test_sampler, batch_size=1)
+        return trainloader, devloader, testloader
+
 
 """ 
-since train data and test data have different structure, the easiest I have come up with to capture this is with
-a separate classes
+since train data and test data have different structure, 
+the easiest I have come up with is to capture this with
+separate classes. ActivityTestSet basically looks like the original dataset,
+ActivityTrainSet preselects object trajectories according object label and 
+additionally adds no action data
 """
 
 
@@ -67,7 +102,7 @@ class ActivityTrainSet(Dataset):
             for idx in self.object2idx.values():
                 if idx in (0, object_index):
                     continue  # skip hand and object involved
-                # activity_label trajectories of objects that are non involved with "no action"
+                #  object trajectories of objects that are not involved are labeled "no action"
                 self.data.append(dict(trajectory=trajectory[:, [0, idx], :],
                                       activity_label=self.labels2idx["no action"],
                                       object_label=object_index
@@ -120,41 +155,9 @@ def rolling_window(trajectories, window_length):
             window[-1] = trajectory[i]
             yield window
 
-
-# shuffle the data, and define the split
-def train_dev_test_loader(act_data, split={'train': 0.8, "dev": 0.1, 'test': 0.1}):
-    np.random.seed(420)
-    # first we split the test set from the rest
-    n = len(act_data)
-    indices = list(range(n))
-    np.random.shuffle(indices)
-    split_train = int(split['train'] * n)
-    rest_idx, test_idx = indices[:split_train], indices[split_train:]
-    rest_data = ActivityTrainSet(act_data, rest_idx)
-    test_data = ActivityTestSet(act_data, test_idx)
-    test_data_2 = ActivityTrainSet(act_data, test_idx)
-    # then we split train and dev
-    m = len(rest_data)
-    rest_indices = list(range(m))
-    np.random.shuffle(rest_indices)
-    # since the total index size is now reduced to train split, we have to rescale the dev split
-    split_dev = int(split['dev'] * m / split["train"])
-    dev_idx, train_idx = rest_indices[:split_dev], rest_indices[split_dev:]
-    train_sampler = SubsetRandomSampler(train_idx)
-    dev_sampler = SubsetRandomSampler(dev_idx)
-    test_sampler = RandomSampler(test_data)
-    test_sampler_2 = RandomSampler(test_data_2)
-    trainloader = torch.utils.data.DataLoader(rest_data,
-                                              sampler=train_sampler, batch_size=1)
-    devloader = torch.utils.data.DataLoader(rest_data,
-                                            sampler=dev_sampler, batch_size=1)
-    testloader = torch.utils.data.DataLoader(test_data,
-                                             sampler=test_sampler, batch_size=1)
-    testloader2 = torch.utils.data.DataLoader(test_data_2,
-                                              sampler=test_sampler_2, batch_size=1)
-    return trainloader, devloader, testloader, testloader2
-
-
+"""
+Here comes a bunch of transformations that are not used yet
+"""
 # this is used to get a homogenous transformation from object frame to human frame
 def homogenous_trans(sample):
     # get the matrix
@@ -194,7 +197,7 @@ def pseudo_toy_trans(sample):
 if __name__ == '__main__':
     # Create dataset & loader
     act_dataset = ActivityDataset('./Data/27_04', window_length=5)
-    trainloader, devloader, testloader, testloader2 = train_dev_test_loader(act_dataset)
+    trainloader, devloader, testloader, testloader2 = act_dataset.train_dev_test_loader()
     for i, sample in enumerate(trainloader):
         if i == 0:
             break

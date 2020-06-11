@@ -1,14 +1,11 @@
 from SimpleClassifier import SimpleClassifier
 from ActivityData import ActivityDataset
-from ActivityData import train_dev_test_loader
-from ActivityData import homogenous_trans, pseudo_relative_trans, pseudo_toy_trans
 import torch.nn as nn
 from torch import optim
 import torch
 from sklearn import metrics
 import matplotlib.pyplot as plt
 import random
-import os
 
 
 def train(trainloader, devloader, model, epochs=3, lr=0.001, savepath="./act_rec.pth", device="cpu"):
@@ -53,25 +50,10 @@ def train(trainloader, devloader, model, epochs=3, lr=0.001, savepath="./act_rec
     return train_losses, test_losses
 
 
-def evaluate_action(test_loader, model, device="cpu"):
-    accuracy = 0
-    preds = torch.tensor([], dtype=torch.long)
-    labels = torch.tensor([], dtype=torch.long)
-    with torch.no_grad():
-        for data in test_loader:
-            trajectory, label = data['trajectory'], data['activity_label']
-            trajectory, label = trajectory.to(device), label.to(device)
-            logits = model.forward(trajectory)
-            _, top_class = torch.max(logits, dim=1)
-            equals = top_class == label.view(*top_class.shape)
-            accuracy += torch.mean(equals.type(torch.FloatTensor)).item()
-            preds = torch.cat((preds, top_class), dim=0)
-            labels = torch.cat((labels, label), dim=0)
-        print(f"Test accuracy: {accuracy / len(test_loader):.3f}")
-    return preds, labels
-
-
-def evaluate_action_2(testloader, model, obj2idx, labels2idx, device='cpu'):
+def evaluate_action(testloader, model, obj2idx, labels2idx, device='cpu'):
+    """
+    solely evaluates single action
+    """
     accuracy = 0
     total = 0
     with torch.no_grad():
@@ -100,6 +82,10 @@ def evaluate_action_2(testloader, model, obj2idx, labels2idx, device='cpu'):
 
 
 def evaluate_action_object(testloader, model, obj2idx, labels2idx, device="cpu"):
+    """
+    iterates over all object trajectories, predicts the action, object pair that
+    maximizes the logits
+    """
     accuracy = 0
     with torch.no_grad():
         for data in testloader:
@@ -147,10 +133,12 @@ if __name__ == '__main__':
     act_data = ActivityDataset('./Data/27_04', window_length=5)
     label2idx = act_data.labels2idx
     object2idx = act_data.object2idx
-    trainloader, devloader, testloader, testloader2 = train_dev_test_loader(act_data)
+    # data loader get splitted and shuffled data
+    trainloader, devloader, testloader = act_data.train_dev_test_loader()
+    # initialize classifier with specified output dimension
     model = SimpleClassifier(len(label2idx))
     model.double()
     train_losses, test_losses = train(trainloader, devloader, model)
     print_losses(train_losses, test_losses)
-    evaluate_action_2(testloader, model, object2idx, label2idx)
+    evaluate_action(testloader, model, object2idx, label2idx)
     evaluate_action_object(testloader, model, object2idx, label2idx)
